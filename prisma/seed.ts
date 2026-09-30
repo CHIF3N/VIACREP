@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Seeds everything the demo needs:
  *   - VIAC organisation record (letterhead + brand tokens + default narrative)
  *   - Three funder/lens rows (VIAC, MAMA, WHW)
@@ -10,6 +10,7 @@
  *
  * Safe to re-run: everything is upserted; sessions regenerated from a fixed seed.
  */
+import "dotenv/config";
 import { PrismaClient, Role, Sex, NarrativeStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { GEOGRAPHY, SEEDED_COMMUNITY_COUNT } from "./data/geography";
