@@ -28,6 +28,7 @@ import { FacilitatorPicker } from "@/components/sessions/facilitator-picker";
 import {
   createActivityTypeAction,
   createCommunityAction,
+  createProjectAction,
   createThematicAreaAction,
   saveSessionAction,
 } from "@/app/(app)/sessions/actions";
@@ -61,6 +62,7 @@ export function SessionForm({
 
   const [values, setValues] = React.useState<SessionFormValues>(initial);
   const [communities, setCommunities] = React.useState(data.communities);
+  const [projects, setProjects] = React.useState(data.projects);
   const [thematicAreas, setThematicAreas] = React.useState(data.thematicAreas);
   const [activityTypes, setActivityTypes] = React.useState(data.activityTypes);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
@@ -232,19 +234,30 @@ export function SessionForm({
             note="All optional"
           />
           <div className="grid gap-5 px-5 pb-6 sm:grid-cols-2 sm:px-6">
-            <Field label="Project / programme" htmlFor="project">
-              <Select
+            <Field label="Project / programme" htmlFor="project" hint="Free entry">
+              <Combobox
                 id="project"
-                value={values.projectId ?? ""}
-                onChange={(e) => set("projectId", e.target.value || null)}
-              >
-                <option value="">Not specified</option>
-                {data.projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
+                options={projects.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                }))}
+                value={values.projectId}
+                onChange={(v) => set("projectId", v)}
+                placeholder="Not specified"
+                searchPlaceholder="Search or type a new programme…"
+                emptyText="No match — type to add a new project"
+                onCreate={async (name) => {
+                  const result = await createProjectAction(name);
+                  if (!result.ok) return toast("error", result.error);
+                  setProjects((list) =>
+                    list.some((x) => x.id === result.data.id)
+                      ? list
+                      : [...list, result.data],
+                  );
+                  set("projectId", result.data.id);
+                  toast("success", `Added "${result.data.name}"`);
+                }}
+              />
             </Field>
 
             <Field label="Type of activity" htmlFor="activityType">

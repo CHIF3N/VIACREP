@@ -24,6 +24,7 @@ function revalidateAll() {
   revalidatePath("/sessions");
   revalidatePath("/reports");
   revalidatePath("/data");
+  revalidatePath("/map");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -203,6 +204,33 @@ export async function createActivityTypeAction(
 
   const count = await db.activityType.count();
   const created = await db.activityType.create({
+    data: { name: parsed.data, sortOrder: count },
+  });
+  revalidatePath("/sessions/new");
+  revalidatePath("/settings");
+  return { ok: true, data: { id: created.id, name: created.name } };
+}
+
+/**
+ * Any user may introduce a new project / programme name from the session form.
+ * The record is upserted (case-insensitive) so duplicates are merged silently.
+ */
+export async function createProjectAction(
+  name: string,
+): Promise<ActionResult<{ id: string; name: string }>> {
+  await requireUser();
+  const parsed = nameSchema.safeParse(name);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid" };
+  }
+
+  const existing = await db.project.findFirst({
+    where: { name: { equals: parsed.data, mode: "insensitive" } },
+  });
+  if (existing) return { ok: true, data: { id: existing.id, name: existing.name } };
+
+  const count = await db.project.count();
+  const created = await db.project.create({
     data: { name: parsed.data, sortOrder: count },
   });
   revalidatePath("/sessions/new");
