@@ -6,6 +6,18 @@ import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { db } from "./db";
+import type { SessionUser } from "./roles";
+
+// Re-export client-safe role helpers and SessionUser from lib/roles.ts
+// so existing code importing from lib/auth still works.
+export type { SessionUser } from "./roles";
+export {
+  seesEverything,
+  canManageSettings,
+  canAddCommunity,
+  canEditSession,
+  canWriteReports,
+} from "./roles";
 
 const COOKIE_NAME = "viac_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // one week
@@ -20,16 +32,6 @@ function secret() {
   return new TextEncoder().encode(value);
 }
 
-export type SessionUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  designation: string | null;
-  divisionId: string | null;
-  divisionName: string | null;
-};
-
 /* -------------------------------------------------------------------------- */
 /* Sign in / sign out                                                          */
 /* -------------------------------------------------------------------------- */
@@ -39,7 +41,6 @@ export async function verifyCredentials(email: string, password: string) {
     where: { email: email.trim().toLowerCase() },
   });
   if (!user) {
-    // Hash anyway so a missing account and a wrong password take the same time.
     await bcrypt.compare(password, "$2b$10$invalidinvalidinvalidinvalidinva");
     return null;
   }
@@ -121,33 +122,3 @@ export const ROLE_LABELS: Record<Role, string> = {
   COORDINATOR: "Coordinator",
   APPROVER: "Approver",
 };
-
-/** Coordinators and approvers see the whole organisation. */
-export function seesEverything(user: SessionUser) {
-  return user.role === Role.COORDINATOR || user.role === Role.APPROVER;
-}
-
-/** Managing lookup lists, geography and the letterhead is coordinator work. */
-export function canManageSettings(user: SessionUser) {
-  return user.role === Role.COORDINATOR;
-}
-
-/**
- * Per the brief: coordinators add new communities. Officers pick from the list.
- */
-export function canAddCommunity(user: SessionUser) {
-  return user.role === Role.COORDINATOR;
-}
-
-/** Officers may only change sessions they logged. */
-export function canEditSession(user: SessionUser, createdById: string) {
-  return seesEverything(user) || user.id === createdById;
-}
-
-/**
- * Report authoring is deliberately open to every role — the brief is explicit
- * that roles scope what you can see, not whether you can write a report.
- */
-export function canWriteReports() {
-  return true;
-}

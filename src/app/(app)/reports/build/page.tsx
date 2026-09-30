@@ -3,12 +3,16 @@ import { ExternalLink } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { resolveReport } from "@/lib/resolve-report";
 import { getFilterOptions, getDataYears } from "@/lib/aggregate";
+import { aggregateMama } from "@/lib/aggregate-mama";
+import { aggregateWhw } from "@/lib/aggregate-whw";
+import { parseLens } from "@/lib/lens";
 import { scopeToSearchParams } from "@/lib/scope";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScopeBar } from "@/components/filters/scope-bar";
 import { NarrativeEditor } from "@/components/report/narrative-editor";
+import { LensKpiPanel } from "@/components/report/lens-kpi-panel";
 import {
   LetterheadDocument,
   LetterheadStyles,
@@ -24,6 +28,7 @@ export default async function BuildReportPage({
 }) {
   const params = await searchParams;
   const user = await requireUser();
+  const lens = parseLens(params.lens);
 
   const [resolved, options, years] = await Promise.all([
     resolveReport(params, user),
@@ -32,7 +37,15 @@ export default async function BuildReportPage({
   ]);
 
   const { scope, data, doc, title, origin, carriedFrom, status } = resolved;
+
+  // Donor-specific KPIs, scoped to the same period as the report
+  const [mamaScoped, whwScoped] = await Promise.all([
+    lens === "mama" ? aggregateMama(scope, user).catch(() => null) : Promise.resolve(null),
+    lens === "whw"  ? aggregateWhw(scope, user).catch(() => null)  : Promise.resolve(null),
+  ]);
+
   const query = scopeToSearchParams(scope).toString();
+  const lensQuery = lens !== "viac" ? `${query}&lens=${lens}` : query;
 
   return (
     <>
@@ -49,35 +62,71 @@ export default async function BuildReportPage({
             <Badge tone="gold">
               {formatNumber(data.totals.participants)} participants
             </Badge>
+            {lens !== "viac" && (
+              <Badge tone={lens === "mama" ? "gold" : "blue"}>
+                {lens === "mama" ? "MAMA Network" : "Women Help Women"}
+              </Badge>
+            )}
           </>
         }
       />
 
       {!scope.sessionId && (
-        <ScopeBar
-          scope={scope}
-          className="mb-5"
-          dimensions={["project", "community", "thematicArea", "activityType"]}
-          options={{
-            projects: options.projects,
-            thematicAreas: options.thematicAreas,
-            activityTypes: options.activityTypes,
-            ageGroups: options.ageGroups,
-            communities: options.communities.map((c) => ({
-              id: c.id,
-              name: c.name,
-              divisionSubdivision: `${c.subdivision.division.name} - ${c.subdivision.name}`,
-            })),
-            officers: options.users,
-            years,
-          }}
-        />
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <ScopeBar
+            scope={scope}
+            className="flex-1"
+            dimensions={["project", "community", "thematicArea", "activityType"]}
+            options={{
+              projects: options.projects,
+              thematicAreas: options.thematicAreas,
+              activityTypes: options.activityTypes,
+              ageGroups: options.ageGroups,
+              communities: options.communities.map((c) => ({
+                id: c.id,
+                name: c.name,
+                divisionSubdivision: `${c.subdivision.division.name} - ${c.subdivision.name}`,
+              })),
+              officers: options.users,
+              years,
+            }}
+          />
+          {/* Lens switcher for report context */}
+          <div className="flex shrink-0 items-center gap-1 rounded-control border border-hairline bg-white p-1 shadow-tile">
+            {(["viac", "mama", "whw"] as const).map((l) => {
+              const label = l === "viac" ? "Universal" : l === "mama" ? "MAMA" : "WHW";
+              const href = l === "viac"
+                ? `/reports/build?${query}`
+                : `/reports/build?${query}&lens=${l}`;
+              const active = lens === l;
+              return (
+                <a
+                  key={l}
+                  href={href}
+                  className={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    active
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-ink-500 hover:bg-ink-100"
+                  }`}
+                >
+                  {label}
+                </a>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)] xl:gap-6">
-        <div>
+        <div className="space-y-5">
+          {/* Donor KPI panel — shown above the narrative editor for MAMA/WHW lenses */}
+          {lens !== "viac" && (mamaScoped || whwScoped) && (
+            <div className="rounded-card border border-hairline bg-ink-50/50 p-4 shadow-tile">
+              <LensKpiPanel lens={lens} mama={mamaScoped} whw={whwScoped} />
+            </div>
+          )}
           <NarrativeEditor
-            query={query}
+            query={lensQuery}
             title={title}
             exportBase="/api/export"
             origin={origin}
@@ -104,7 +153,7 @@ export default async function BuildReportPage({
               description="Exactly what the PDF will print, letterhead included."
               action={
                 <Link
-                  href={`/print/report?${query}`}
+                  href={`/print/report?${lensQuery}`}
                   target="_blank"
                   className="flex items-center gap-1.5 text-[13px] font-medium text-blue-700 transition-colors hover:text-blue-800"
                 >

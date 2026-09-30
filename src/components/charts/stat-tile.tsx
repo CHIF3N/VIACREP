@@ -23,7 +23,7 @@ export function StatTile({
   footnote,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   suffix?: string;
   /** -1..∞ growth vs the previous period, or null when there's no comparison. */
   delta?: number | null;
@@ -65,7 +65,7 @@ export function StatTile({
 
       <p className="mt-3 flex items-baseline gap-1.5">
         <span className="text-[34px] leading-none font-semibold tracking-[-0.03em] text-ink-900">
-          {formatNumber(value)}
+          {typeof value === "number" ? formatNumber(value) : value}
         </span>
         {suffix && (
           <span className="text-[13px] font-medium text-ink-400">{suffix}</span>

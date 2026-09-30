@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import "leaflet/dist/leaflet.css";
 import { ToastProvider } from "@/components/ui/feedback";
 
 const inter = Inter({

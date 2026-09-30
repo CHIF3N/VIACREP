@@ -1,15 +1,14 @@
-/**
+﻿/**
  * Seeds everything the demo needs:
- *   - VIAC's organisation record (letterhead + brand tokens + default narrative)
- *   - the four demo accounts
- *   - the full geography tree from `Sheet1` (103 communities)
- *   - the lookup lists from the workbook's dropdowns
- *   - the key-population count matrix from `Data_Entry`
- *   - ~5 months of realistic outreach sessions so the dashboard and reports
- *     have something to show
+ *   - VIAC organisation record (letterhead + brand tokens + default narrative)
+ *   - Three funder/lens rows (VIAC, MAMA, WHW)
+ *   - Four demo accounts
+ *   - Full geography tree from Sheet1 (103 communities) + GPS coordinates
+ *   - Lookup lists from the workbook dropdowns
+ *   - Key-population count matrix from Data_Entry
+ *   - ~5 months of realistic outreach sessions
  *
- * Safe to re-run: everything is upserted, and demo sessions are regenerated
- * from a fixed seed so the numbers are stable between runs.
+ * Safe to re-run: everything is upserted; sessions regenerated from a fixed seed.
  */
 import { PrismaClient, Role, Sex, NarrativeStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
@@ -28,13 +27,13 @@ import {
   DEFAULT_CHALLENGES,
   DEFAULT_RECOMMENDATIONS,
 } from "./data/narrative-defaults";
+import { COMMUNITY_COORDS } from "./data/coordinates";
 
 const prisma = new PrismaClient();
 
 /* -------------------------------------------------------------------------- */
-/* Deterministic randomness — the demo data must not shuffle between runs.     */
+/* Deterministic randomness                                                    */
 /* -------------------------------------------------------------------------- */
-
 function makeRng(seed: number) {
   let s = seed >>> 0;
   return () => {
@@ -88,14 +87,78 @@ async function main() {
   };
   const existingOrg = await prisma.organization.findFirst();
   const org = existingOrg
-    ? await prisma.organization.update({
-        where: { id: existingOrg.id },
-        data: orgData,
-      })
+    ? await prisma.organization.update({ where: { id: existingOrg.id }, data: orgData })
     : await prisma.organization.create({ data: orgData });
   console.log(`  organisation      ${org.name}`);
 
-  /* --- geography --------------------------------------------------------- */
+  /* --- funders / lenses -------------------------------------------------- */
+  const FUNDERS = [
+    {
+      slug: "viac",
+      name: "Universal VIAC Standard",
+      reportingFrequency: "monthly",
+      templateConfig: {
+        description: "Standard VIAC outreach reporting framework",
+        kpis: ["totalReach", "sessions", "communities", "facilitators"],
+        narrativeSections: [
+          "Executive Summary",
+          "Service Delivery Update",
+          "Advocacy & Movement Building",
+          "Lessons Learned",
+          "Next Steps",
+        ],
+      },
+    },
+    {
+      slug: "mama",
+      name: "MAMA Network",
+      reportingFrequency: "quarterly",
+      templateConfig: {
+        description: "Grassroots SMA accompaniment and peer referral framework",
+        kpis: ["hotlineContacts", "peerAccompanimentCases", "safeSpaceOutreaches", "meanPaseScore"],
+        benchmarks: {},
+        narrativeSections: [
+          "Hotline Activity Log",
+          "Peer Accompaniment Summary",
+          "Community Feedback",
+          "Safe Space Sessions",
+          "Feminist M&E Reflections",
+          "Next Steps",
+        ],
+      },
+    },
+    {
+      slug: "whw",
+      name: "Women Help Women",
+      reportingFrequency: "quarterly",
+      templateConfig: {
+        description: "Digital telehealth consultations and abortion outcome tracking",
+        kpis: ["telecounselingReach", "outcomeCompletionPct", "additionalCarePct", "satisfactionPct"],
+        benchmarks: {
+          additionalCarePct: 0.126,
+          satisfactionPct: 0.875,
+        },
+        narrativeSections: [
+          "Telehealth Volume",
+          "Clinical Outcomes",
+          "Additional Care-Seeking",
+          "Client Satisfaction",
+          "Lessons Learned",
+          "Next Steps",
+        ],
+      },
+    },
+  ];
+  for (const f of FUNDERS) {
+    await prisma.funder.upsert({
+      where: { slug: f.slug },
+      update: { name: f.name, templateConfig: f.templateConfig, reportingFrequency: f.reportingFrequency },
+      create: f,
+    });
+  }
+  console.log(`  funders           ${FUNDERS.length} (viac, mama, whw)`);
+
+  /* --- geography + coordinates ------------------------------------------- */
   const communityIds: string[] = [];
   const divisionIdByName = new Map<string, string>();
 
@@ -116,18 +179,27 @@ async function main() {
 
       for (const [si, subdivision] of division.subdivisions.entries()) {
         const s = await prisma.subdivision.upsert({
-          where: {
-            divisionId_name: { divisionId: d.id, name: subdivision.name },
-          },
+          where: { divisionId_name: { divisionId: d.id, name: subdivision.name } },
           update: { sortOrder: si },
           create: { name: subdivision.name, divisionId: d.id, sortOrder: si },
         });
 
         for (const [ci, name] of subdivision.communities.entries()) {
+          const coords = COMMUNITY_COORDS[subdivision.name]?.[name];
           const c = await prisma.community.upsert({
             where: { subdivisionId_name: { subdivisionId: s.id, name } },
-            update: { sortOrder: ci },
-            create: { name, subdivisionId: s.id, sortOrder: ci },
+            update: {
+              sortOrder: ci,
+              lat: coords?.[0] ?? null,
+              lng: coords?.[1] ?? null,
+            },
+            create: {
+              name,
+              subdivisionId: s.id,
+              sortOrder: ci,
+              lat: coords?.[0] ?? null,
+              lng: coords?.[1] ?? null,
+            },
           });
           communityIds.push(c.id);
         }
@@ -177,16 +249,12 @@ async function main() {
           name: u.name,
           role: u.role,
           designation: u.designation,
-          divisionId: divisionName
-            ? (divisionIdByName.get(divisionName) ?? null)
-            : null,
+          divisionId: divisionName ? (divisionIdByName.get(divisionName) ?? null) : null,
         },
         create: {
           ...u,
           passwordHash,
-          divisionId: divisionName
-            ? (divisionIdByName.get(divisionName) ?? null)
-            : null,
+          divisionId: divisionName ? (divisionIdByName.get(divisionName) ?? null) : null,
         },
       }),
     ),
@@ -249,7 +317,6 @@ async function main() {
   /* --- demo sessions ----------------------------------------------------- */
   await prisma.session.deleteMany({});
 
-  // Officers log sessions in their own division; the coordinator logs anywhere.
   const officers = users.filter((u) => u.role === Role.OFFICER);
   const communitiesByDivision = new Map<string, string[]>();
   for (const community of await prisma.community.findMany({
@@ -261,8 +328,6 @@ async function main() {
     communitiesByDivision.set(key, list);
   }
 
-  // Five whole months ending with the month before today, so the "last month"
-  // report always has data and the trend chart has a real shape.
   const today = new Date();
   const months: { year: number; month: number }[] = [];
   for (let back = 5; back >= 1; back--) {
@@ -272,7 +337,6 @@ async function main() {
 
   let sessionCount = 0;
   for (const [index, { year, month }] of months.entries()) {
-    // A gently rising programme: 4 sessions in the earliest month up to 8.
     const perMonth = 4 + index;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -285,8 +349,6 @@ async function main() {
 
       const date = new Date(Date.UTC(year, month, between(1, daysInMonth)));
 
-      // Counts: a General turnout with a couple of key populations layered in,
-      // which is what the paper attendance sheets actually look like.
       const counts: { keyPopulationId: string; sex: Sex; count: number }[] = [];
       const add = (kpName: string, sex: Sex, count: number) => {
         if (count <= 0) return;
@@ -321,9 +383,7 @@ async function main() {
       const totalParticipants = counts.reduce((sum, c) => sum + c.count, 0);
 
       const facilitators = Array.from(
-        new Set(
-          Array.from({ length: between(1, 3) }, () => pick(FACILITATOR_POOL)),
-        ),
+        new Set(Array.from({ length: between(1, 3) }, () => pick(FACILITATOR_POOL))),
       );
 
       await prisma.session.create({
@@ -344,9 +404,7 @@ async function main() {
       sessionCount++;
     }
   }
-  console.log(
-    `  sessions          ${sessionCount} across ${months.length} months`,
-  );
+  console.log(`  sessions          ${sessionCount} across ${months.length} months`);
 
   /* --- a finished narrative for the most recent complete month ----------- */
   const last = months[months.length - 1];
@@ -364,11 +422,7 @@ async function main() {
     update: {},
     create: {
       scopeKey,
-      // Same shape as `lib/scope.ts`'s Scope, so the reports list can turn it
-      // back into query params.
-      scope: {
-        period: { kind: "month", year: last.year, month: last.month + 1 },
-      },
+      scope: { period: { kind: "month", year: last.year, month: last.month + 1 } },
       title,
       periodStart,
       periodEnd,

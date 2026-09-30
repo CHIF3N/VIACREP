@@ -1,18 +1,19 @@
-// VIAC Reports — data model
+// VIAC Reports - data model
 //
-// This mirrors the `Data_Entry` sheet of Vision_In_Action_Reporting_Template.xlsx.
-// A Session is one row of that sheet; SessionCount reproduces the key-population ×
+// This mirrors the Data_Entry sheet of Vision_In_Action_Reporting_Template.xlsx.
+// A Session is one row of that sheet; SessionCount reproduces the key-population x
 // sex count matrix as rows rather than columns, so VIAC can add a population
 // without a schema change.
+//
+// ENTERPRISE UPGRADE (Phase 1):
+//   - Funder: configurable donor/lens table (viac, mama, whw)
+//   - Community: lat/lng for map intelligence
+//   - Document: file ingestion provenance + SHA-256 dedup
+//   - SrhrClinicalTelemetry: MAMA/WHW clinical outcome tracking
+//   - AuditLog: immutable edit history
 
 generator client {
-  provider = "prisma-client-js"
-  // Prisma ships a per-platform query engine, and a deployed function does not
-  // run the developer's OS — without a matching target the first query throws
-  // "Query engine binary could not be found". Netlify Functions and Vercel both
-  // run on Amazon Linux (rhel); debian covers container and Cloud Run style
-  // hosts. Each engine is ~17 MB and Netlify caps a function bundle at 50 MB,
-  // so if a deploy fails on size, drop the target the host does not use.
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
@@ -43,16 +44,33 @@ enum NarrativeStatus {
   FINAL
 }
 
-/// Single-tenant for the demo: one row holding VIAC's letterhead, brand tokens
-/// and the default narrative text carried into a brand-new reporting period.
+enum ExtractionStatus {
+  PENDING
+  REVIEWING
+  COMMITTED
+  FAILED
+}
+
+enum AbortionOutcome {
+  NO_LONGER_PREGNANT
+  STILL_PREGNANT
+  UNKNOWN
+  LOST_TO_FOLLOW_UP
+}
+
+enum SatisfactionRating {
+  VERY_SATISFIED
+  SATISFIED
+  NEUTRAL
+  DISSATISFIED
+}
+
 model Organization {
   id             String @id @default(cuid())
   name           String
   shortName      String
   headerImageUrl String
   footerImageUrl String
-  /// Brand palette + typography tokens, so the letterhead can be re-themed
-  /// without a deploy.
   brandTokens    Json
 
   defaultObjectives      String @db.Text
@@ -65,34 +83,41 @@ model Organization {
   updatedAt DateTime @updatedAt
 }
 
-model User {
-  id           String  @id @default(cuid())
-  name         String
-  email        String  @unique
-  passwordHash String
-  role         Role    @default(OFFICER)
-  designation  String?
+model Funder {
+  id                 String    @id @default(cuid())
+  slug               String    @unique
+  name               String
+  reportingFrequency String    @default("monthly")
+  templateConfig     Json      @default("{}")
+  isActive           Boolean   @default(true)
+  documents          Document[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
 
-  /// Officers are scoped to a division; coordinators and approvers see everything.
-  divisionId String?
-  division   Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(OFFICER)
+  designation  String?
+  divisionId   String?
+  division     Division? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
 
   sessions          Session[]
   facilitatorOf     SessionFacilitator[]
   narrativePeriods  NarrativePeriod[]
   reports           Report[]
   communitiesAdded  Community[]
+  uploadedDocuments Document[]
+  auditLogs         AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([divisionId])
 }
-
-// ---------------------------------------------------------------------------
-// Geography — Region → Division → Subdivision → Community
-// Seeded from `Sheet1`; new communities can be added by coordinators.
-// ---------------------------------------------------------------------------
 
 model Region {
   id        String     @id @default(cuid())
@@ -131,10 +156,12 @@ model Community {
   subdivisionId String
   subdivision   Subdivision @relation(fields: [subdivisionId], references: [id], onDelete: Cascade)
 
-  /// True for communities typed in by staff rather than seeded from the workbook.
-  isCustom    Boolean @default(false)
+  lat Float?
+  lng Float?
+
+  isCustom    Boolean  @default(false)
   createdById String?
-  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   sessions  Session[]
   createdAt DateTime  @default(now())
@@ -142,10 +169,6 @@ model Community {
   @@unique([subdivisionId, name])
   @@index([name])
 }
-
-// ---------------------------------------------------------------------------
-// Lookups — seeded from the workbook's dropdowns, all extendable
-// ---------------------------------------------------------------------------
 
 model Project {
   id        String    @id @default(cuid())
@@ -179,61 +202,67 @@ model AgeGroup {
   sessions  Session[]
 }
 
-/// One row per key population tracked in the count matrix. `tracksMale` /
-/// `tracksFemale` reproduce the sheet's asymmetric columns (AGYW is female-only,
-/// AYBM male-only). The `export*` fields let the Excel export rebuild
-/// `Data_Entry`'s exact — and rather idiosyncratic — header row.
 model KeyPopulation {
-  id           String  @id @default(cuid())
-  name         String  @unique
-  shortName    String
-  tracksMale   Boolean @default(true)
-  tracksFemale Boolean @default(true)
-  maleLabel    String  @default("Male")
-  femaleLabel  String  @default("Female")
-
-  exportGroupLabel  String
-  exportMaleHeader  String?
+  id                 String         @id @default(cuid())
+  name               String         @unique
+  shortName          String
+  tracksMale         Boolean        @default(true)
+  tracksFemale       Boolean        @default(true)
+  maleLabel          String         @default("Male")
+  femaleLabel        String         @default("Female")
+  exportGroupLabel   String
+  exportMaleHeader   String?
   exportFemaleHeader String?
-
-  sortOrder Int            @default(0)
-  isActive  Boolean        @default(true)
-  counts    SessionCount[]
+  sortOrder          Int            @default(0)
+  isActive           Boolean        @default(true)
+  counts             SessionCount[]
 }
 
-// ---------------------------------------------------------------------------
-// Sessions — one row of `Data_Entry`
-// ---------------------------------------------------------------------------
+model Document {
+  id               String           @id @default(cuid())
+  fileName         String
+  storagePath      String
+  fileHash         String           @unique
+  mimeType         String
+  extractionStatus ExtractionStatus @default(PENDING)
+  extractedData    Json?
+  funderId         String?
+  funder           Funder?          @relation(fields: [funderId], references: [id], onDelete: SetNull)
+  uploadedById     String
+  uploadedBy       User             @relation(fields: [uploadedById], references: [id])
+  sessions         Session[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([fileHash])
+  @@index([extractionStatus])
+  @@index([uploadedById])
+}
 
 model Session {
-  id   String   @id @default(cuid())
-  /// Week and month are derived from this, exactly as the sheet's
-  /// WEEKNUM() / TEXT(date,"mmm-yyyy") formulas do.
-  date DateTime @db.Date
+  id                String        @id @default(cuid())
+  date              DateTime      @db.Date
+  communityId       String
+  community         Community     @relation(fields: [communityId], references: [id])
+  projectId         String?
+  project           Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  thematicAreaId    String?
+  thematicArea      ThematicArea? @relation(fields: [thematicAreaId], references: [id], onDelete: SetNull)
+  ageGroupId        String?
+  ageGroup          AgeGroup?     @relation(fields: [ageGroupId], references: [id], onDelete: SetNull)
+  activityTypeId    String?
+  activityType      ActivityType? @relation(fields: [activityTypeId], references: [id], onDelete: SetNull)
+  notes             String?       @db.Text
+  totalParticipants Int           @default(0)
+  sourceDocumentId  String?
+  sourceDocument    Document?     @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  createdById       String
+  createdBy         User          @relation(fields: [createdById], references: [id])
 
-  communityId String
-  community   Community @relation(fields: [communityId], references: [id])
-
-  projectId      String?
-  project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  thematicAreaId String?
-  thematicArea   ThematicArea? @relation(fields: [thematicAreaId], references: [id], onDelete: SetNull)
-  ageGroupId     String?
-  ageGroup       AgeGroup?     @relation(fields: [ageGroupId], references: [id], onDelete: SetNull)
-  activityTypeId String?
-  activityType   ActivityType? @relation(fields: [activityTypeId], references: [id], onDelete: SetNull)
-
-  notes String? @db.Text
-
-  /// Denormalised sum of `counts`, kept in step on every write. Mirrors the
-  /// sheet's TOTAL column and keeps dashboard aggregates to a single scan.
-  totalParticipants Int @default(0)
-
-  createdById String
-  createdBy   User   @relation(fields: [createdById], references: [id])
-
-  facilitators SessionFacilitator[]
-  counts       SessionCount[]
+  facilitators    SessionFacilitator[]
+  counts          SessionCount[]
+  clinicalRecords SrhrClinicalTelemetry[]
+  auditLogs       AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -243,6 +272,7 @@ model Session {
   @@index([projectId])
   @@index([thematicAreaId])
   @@index([createdById])
+  @@index([sourceDocumentId])
 }
 
 model SessionFacilitator {
@@ -269,63 +299,86 @@ model SessionCount {
   @@index([keyPopulationId])
 }
 
-// ---------------------------------------------------------------------------
-// Reporting
-// ---------------------------------------------------------------------------
+model SrhrClinicalTelemetry {
+  id                          String              @id @default(cuid())
+  sessionId                   String
+  session                     Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  gestationalAgeWeeks         Int?
+  outcomeReported             AbortionOutcome?
+  outcomeConfirmationMethods  String[]
+  additionalMedicalCareSought Boolean?
+  additionalCareType          String?
+  additionalCareReason        String?
+  satisfactionRating          SatisfactionRating?
+  paseScore                   Int?
+  autonomousDecisionMade      Boolean?
+  gbvDisclosed                Boolean?
+  gbvReferralCompleted        Boolean?
+  isTelecounseling            Boolean             @default(false)
+  createdAt                   DateTime            @default(now())
+  updatedAt                   DateTime            @updatedAt
 
-/// The typed half of a report: the five narrative sections staff write, stored
-/// per scope so the next period can carry them forward as a starting point.
+  @@index([sessionId])
+}
+
 model NarrativePeriod {
-  id String @id @default(cuid())
-
-  /// Canonical string form of `scope`, e.g. "monthly:2026-03" — used to find
-  /// the narrative for a scope and to order carry-forward candidates.
-  scopeKey    String   @unique
-  scope       Json
-  title       String
-  periodStart DateTime @db.Date
-  periodEnd   DateTime @db.Date
-
-  objectives      String @db.Text
-  methodology     String @db.Text
-  lessonsLearnt   String @db.Text
-  challenges      String @db.Text
-  recommendations String @db.Text
-
-  preparedBy           String?
-  preparedDesignation  String?
-  approvedBy           String?
-  approvedDesignation  String?
-
-  status NarrativeStatus @default(DRAFT)
-
-  createdById String
-  createdBy   User   @relation(fields: [createdById], references: [id])
-
-  reports Report[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String          @id @default(cuid())
+  scopeKey            String          @unique
+  scope               Json
+  title               String
+  periodStart         DateTime        @db.Date
+  periodEnd           DateTime        @db.Date
+  objectives          String          @db.Text
+  methodology         String          @db.Text
+  lessonsLearnt       String          @db.Text
+  challenges          String          @db.Text
+  recommendations     String          @db.Text
+  preparedBy          String?
+  preparedDesignation String?
+  approvedBy          String?
+  approvedDesignation String?
+  status              NarrativeStatus @default(DRAFT)
+  createdById         String
+  createdBy           User            @relation(fields: [createdById], references: [id])
+  reports             Report[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   @@index([periodStart])
 }
 
-/// An audit trail of every document generated, so VIAC can see what went out.
 model Report {
-  id    String @id @default(cuid())
-  scope Json
-  title String
-
+  id                String           @id @default(cuid())
+  scope             Json
+  title             String
   narrativePeriodId String?
   narrativePeriod   NarrativePeriod? @relation(fields: [narrativePeriodId], references: [id], onDelete: SetNull)
-
-  format      ReportFormat
-  fileName    String
-  fileUrl     String?
-  generatedAt DateTime     @default(now())
-
-  generatedById String
-  generatedBy   User   @relation(fields: [generatedById], references: [id])
+  format            ReportFormat
+  fileName          String
+  fileUrl           String?
+  generatedAt       DateTime         @default(now())
+  generatedById     String
+  generatedBy       User             @relation(fields: [generatedById], references: [id])
 
   @@index([generatedAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  field      String
+  oldValue   String?  @db.Text
+  newValue   String?  @db.Text
+  reason     String?  @db.Text
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId  String?
+  session    Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([createdAt])
 }

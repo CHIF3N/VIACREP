@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import {
   Activity,
   ArrowRight,
@@ -6,12 +6,20 @@ import {
   Download,
   FileText,
   MapPin,
+  Phone,
   Plus,
+  Star,
   Users,
   UserRoundCheck,
+  Video,
+  Brain,
 } from "lucide-react";
 import { requireUser, seesEverything } from "@/lib/auth";
 import { aggregate, getDataYears, getFilterOptions } from "@/lib/aggregate";
+import { aggregateMama } from "@/lib/aggregate-mama";
+import { aggregateWhw } from "@/lib/aggregate-whw";
+import { parseLens } from "@/lib/lens";
+import { getQualityAlerts } from "@/lib/quality";
 import {
   periodLabel,
   scopeFromSearchParams,
@@ -32,6 +40,8 @@ import {
   ParticipantsOverTime,
   SessionsOverTime,
 } from "@/components/charts/charts";
+import { LensSwitcher } from "@/components/lens/lens-switcher";
+import { QualityAlerts } from "@/components/quality/quality-alerts";
 
 export const metadata = { title: "Dashboard" };
 
@@ -43,11 +53,19 @@ export default async function DashboardPage({
   const params = await searchParams;
   const scope = scopeFromSearchParams(params);
   const user = await requireUser();
+  const lens = parseLens(params["lens"]);
 
-  const [data, options, years] = await Promise.all([
+  const [data, options, years, qualityAlerts] = await Promise.all([
     aggregate(scope, user),
     getFilterOptions(),
     getDataYears(),
+    getQualityAlerts(user),
+  ]);
+
+  // Load lens-specific data in parallel
+  const [mamaData, whwData] = await Promise.all([
+    lens === "mama" ? aggregateMama(scope, user) : Promise.resolve(null),
+    lens === "whw" ? aggregateWhw(scope, user) : Promise.resolve(null),
   ]);
 
   const query = scopeToSearchParams(scope).toString();
@@ -77,6 +95,7 @@ export default async function DashboardPage({
         }
         actions={
           <>
+            <LensSwitcher activeLens={lens} />
             <LinkButton
               href={`/api/export/excel?${query}`}
               variant="secondary"
@@ -116,6 +135,13 @@ export default async function DashboardPage({
         }}
       />
 
+      {/* Quality alerts — always visible when there are issues */}
+      {qualityAlerts.length > 0 && (
+        <div className="mb-5">
+          <QualityAlerts alerts={qualityAlerts} />
+        </div>
+      )}
+
       {data.totals.sessions === 0 ? (
         <Card>
           <EmptyState
@@ -132,57 +158,145 @@ export default async function DashboardPage({
         </Card>
       ) : (
         <div className="space-y-5 lg:space-y-6">
-          {/* ---------------- Tiles ---------------- */}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatTile
-              label="Total participants"
-              value={data.totals.participants}
-              icon={<Users />}
-              tone="blue"
-              spark={spark}
-              delta={data.previous?.participantsDelta}
-              deltaLabel={comparison}
-              footnote={`${formatNumber(data.totals.averagePerSession)} on average per session`}
-            />
-            <StatTile
-              label="Sessions conducted"
-              value={data.totals.sessions}
-              icon={<Activity />}
-              tone="gold"
-              spark={sessionSpark}
-              delta={data.previous?.sessionsDelta}
-              deltaLabel={comparison}
-              footnote={
-                data.overTime.length > 1
-                  ? `Across ${data.overTime.length} reporting periods`
-                  : undefined
-              }
-            />
-            <StatTile
-              label="Communities reached"
-              value={data.totals.communities}
-              icon={<MapPin />}
-              tone="ink"
-              footnote={
-                data.byDivision.length > 0
-                  ? data.byDivision.map((d) => d.name).join(" · ")
-                  : undefined
-              }
-            />
-            <StatTile
-              label="Facilitators"
-              value={data.totals.facilitators}
-              icon={<UserRoundCheck />}
-              tone="ink"
-              footnote={
-                data.facilitators[0]
-                  ? `Most active: ${data.facilitators[0].name}`
-                  : undefined
-              }
-            />
-          </div>
+          {/* ──────────── KPI Tiles — lens-conditional ──────────── */}
+          {lens === "viac" && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatTile
+                label="Total participants"
+                value={data.totals.participants}
+                icon={<Users />}
+                tone="blue"
+                spark={spark}
+                delta={data.previous?.participantsDelta}
+                deltaLabel={comparison}
+                footnote={`${formatNumber(data.totals.averagePerSession)} on average per session`}
+              />
+              <StatTile
+                label="Sessions conducted"
+                value={data.totals.sessions}
+                icon={<Activity />}
+                tone="gold"
+                spark={sessionSpark}
+                delta={data.previous?.sessionsDelta}
+                deltaLabel={comparison}
+                footnote={
+                  data.overTime.length > 1
+                    ? `Across ${data.overTime.length} reporting periods`
+                    : undefined
+                }
+              />
+              <StatTile
+                label="Communities reached"
+                value={data.totals.communities}
+                icon={<MapPin />}
+                tone="ink"
+                footnote={
+                  data.byDivision.length > 0
+                    ? data.byDivision.map((d) => d.name).join(" · ")
+                    : undefined
+                }
+              />
+              <StatTile
+                label="Facilitators"
+                value={data.totals.facilitators}
+                icon={<UserRoundCheck />}
+                tone="ink"
+                footnote={
+                  data.facilitators[0]
+                    ? `Most active: ${data.facilitators[0].name}`
+                    : undefined
+                }
+              />
+            </div>
+          )}
 
-          {/* ---------------- Trend ---------------- */}
+          {lens === "mama" && mamaData && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatTile
+                label="Hotline contacts"
+                value={mamaData.hotlineContacts}
+                icon={<Phone />}
+                tone="blue"
+                footnote="Peer/hotline interactions"
+              />
+              <StatTile
+                label="Peer accompaniment"
+                value={mamaData.peerAccompanimentCases}
+                icon={<Users />}
+                tone="gold"
+                footnote="MAMA project sessions"
+              />
+              <StatTile
+                label="Safe space outreaches"
+                value={mamaData.safeSpaceOutreaches}
+                icon={<MapPin />}
+                tone="ink"
+                footnote="Safe space sessions"
+              />
+              <StatTile
+                label="Mean PASE score"
+                value={mamaData.meanPaseScore ?? "—"}
+                icon={<Brain />}
+                tone="ink"
+                footnote="Perceived Abortion Self-Efficacy (5–25)"
+              />
+            </div>
+          )}
+
+          {lens === "whw" && whwData && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatTile
+                label="Tele-counseling reach"
+                value={whwData.telecounselingReach}
+                icon={<Video />}
+                tone="blue"
+                footnote="Telecounseling sessions"
+              />
+              <StatTile
+                label="Complete outcome"
+                value={
+                  whwData.outcomeCompletionPct !== null
+                    ? `${Math.round(whwData.outcomeCompletionPct * 100)}%`
+                    : "—"
+                }
+                icon={<Star />}
+                tone="gold"
+                footnote={`${whwData.outcomesRecorded} outcomes recorded`}
+              />
+              <StatTile
+                label="Additional care sought"
+                value={
+                  whwData.additionalCarePct !== null
+                    ? `${Math.round(whwData.additionalCarePct * 100)}%`
+                    : "—"
+                }
+                icon={<Activity />}
+                tone={
+                  whwData.additionalCareDelta !== null && whwData.additionalCareDelta > 0
+                    ? "gold"
+                    : "ink"
+                }
+                footnote={`Benchmark: ≤${Math.round(whwData.benchmarks.additionalCarePct * 100)}%`}
+              />
+              <StatTile
+                label="Client satisfaction"
+                value={
+                  whwData.satisfactionPct !== null
+                    ? `${Math.round(whwData.satisfactionPct * 100)}%`
+                    : "—"
+                }
+                icon={<Star />}
+                tone={
+                  whwData.satisfactionDelta !== null && whwData.satisfactionDelta >= 0
+                    ? "blue"
+                    : "ink"
+                }
+                footnote={`Benchmark: ≥${Math.round(whwData.benchmarks.satisfactionPct * 100)}%`}
+              />
+            </div>
+          )}
+
+          {/* ──────────── Charts — universal for all lenses ──────────── */}
           <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
             <Card className="lg:col-span-2">
               <CardHeader
@@ -215,7 +329,6 @@ export default async function DashboardPage({
             </Card>
           </div>
 
-          {/* ---------------- Reach ---------------- */}
           <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
             <Card>
               <CardHeader
@@ -264,7 +377,6 @@ export default async function DashboardPage({
             </Card>
           </div>
 
-          {/* ---------------- Programme mix ---------------- */}
           <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
             <Card>
               <CardHeader

@@ -6,7 +6,8 @@ const nextConfig: NextConfig = {
   // package-lock.json; pin the workspace root so Turbopack ignores it.
   turbopack: { root: path.resolve(__dirname) },
   // Puppeteer must not be bundled — it needs its own Chrome on disk.
-  serverExternalPackages: ["puppeteer", "exceljs"],
+  // xlsx and pdfjs-dist use dynamic require and Node.js APIs — exclude from bundler.
+  serverExternalPackages: ["puppeteer", "exceljs", "xlsx", "pdfjs-dist"],
   // The Word export reads the letterhead PNGs at request time through a path
   // built from process.cwd() (src/lib/exports/docx.ts), which the output file
   // tracer cannot follow. On a serverless host `public/` is served by the CDN

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -13,9 +13,13 @@ import {
   X,
   LogOut,
   Table2,
+  Map,
+  Upload,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { SessionUser } from "@/lib/auth";
+import type { SessionUser } from "@/lib/roles";
+import { seesEverything } from "@/lib/roles";
 import { Avatar } from "@/components/ui/badge";
 import { ViacLogo } from "@/components/layout/viac-logo";
 
@@ -42,13 +46,26 @@ const NAV: NavItem[] = [
   },
   {
     href: "/sessions",
-    label: "Sessions",
+    label: "Session Records",
     icon: ClipboardList,
-    match: (p) => p === "/sessions" || p.startsWith("/sessions/") && p !== "/sessions/new",
+    match: (p) =>
+      p === "/sessions" || (p.startsWith("/sessions/") && p !== "/sessions/new"),
+  },
+  {
+    href: "/map",
+    label: "Map Intelligence",
+    icon: Map,
+    match: (p) => p.startsWith("/map"),
+  },
+  {
+    href: "/import",
+    label: "Import & Ingestion",
+    icon: Upload,
+    match: (p) => p.startsWith("/import"),
   },
   {
     href: "/reports",
-    label: "Reports",
+    label: "Report Studio",
     icon: FileText,
     match: (p) => p.startsWith("/reports"),
   },
@@ -58,12 +75,18 @@ const NAV: NavItem[] = [
     icon: Table2,
     match: (p) => p.startsWith("/data"),
   },
+  {
+    href: "/quality",
+    label: "Quality & Audit",
+    icon: ShieldAlert,
+    match: (p) => p.startsWith("/quality"),
+  },
 ];
 
 const ADMIN_NAV: NavItem[] = [
   {
     href: "/settings",
-    label: "Settings",
+    label: "Settings & RBAC",
     icon: Settings2,
     match: (p) => p.startsWith("/settings"),
   },
@@ -73,14 +96,14 @@ export function Sidebar({ user }: { user: SessionUser }) {
   const [open, setOpen] = React.useState(false);
   const pathname = usePathname();
 
-  // Close the mobile drawer whenever the route changes. Adjusting state during
-  // render (rather than in an effect) avoids the extra committed frame where
-  // the drawer is still open over the new page.
+  // Close the mobile drawer whenever the route changes.
   const [lastPath, setLastPath] = React.useState(pathname);
   if (lastPath !== pathname) {
     setLastPath(pathname);
     if (open) setOpen(false);
   }
+
+  const isAdmin = seesEverything(user);
 
   return (
     <>
@@ -132,7 +155,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
             <NavLink key={item.href} item={item} pathname={pathname} />
           ))}
 
-          {user.role === "COORDINATOR" && (
+          {isAdmin && (
             <>
               <p className="px-3 pt-6 pb-2 text-2xs font-semibold tracking-[0.12em] text-ink-400 uppercase">
                 Administration
