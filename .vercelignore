@@ -1,0 +1,12 @@
+# Prevent local secrets from being bundled into Vercel CLI deployments.
+# (These are already set as encrypted environment variables in the Vercel project.)
+.env
+.env.local
+.env.vercel.local
+
+# Local dev artefacts
+.next/
+node_modules/
+
+# Scripts that rely on a local Postgres instance only
+scripts/pg-dev.ts
