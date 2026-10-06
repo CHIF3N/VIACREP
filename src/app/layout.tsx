@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   },
   description:
     "Community outreach session tracking and standardised reporting for Vision in Action Cameroon.",
+  openGraph: {
+    title: "VIAC Reports",
+    description:
+      "Community outreach session tracking and standardised reporting for Vision in Action Cameroon.",
+  },
 };
 
 export default function RootLayout({

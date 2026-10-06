@@ -1,8 +1,14 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 
+const isVercel = Boolean(process.env.VERCEL || process.env.NOW_BUILDER);
+
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Standalone output is for container/Docker environments (e.g. AI Studio).
+  // On Vercel, Vercel natively handles serverless bundling.
+  // Setting output: "standalone" on Vercel causes Next.js 16 Turbopack with adapters
+  // to suppress emitting .next/next-server.js.nft.json, crashing Vercel's onBuildComplete.
+  output: isVercel ? undefined : "standalone",
   allowedDevOrigins: [
     "*.run.app",
     "ais-dev-b7ex5buxcuwtrjjqez4hye-584903286491.europe-west2.run.app",
@@ -19,7 +25,8 @@ const nextConfig: NextConfig = {
   // and is absent from the function's filesystem, so without this the .docx
   // export throws ENOENT in production while working fine locally.
   outputFileTracingIncludes: {
-    "/*": ["public/letterhead/**/*"],
+    "/**/*": ["public/letterhead/**/*"],
+    "/api/**/*": ["public/letterhead/**/*"],
   },
 };
 
