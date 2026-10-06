@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import {
   Activity,
   ArrowRight,
@@ -25,12 +25,17 @@ import {
   scopeFromSearchParams,
   scopeToSearchParams,
 } from "@/lib/scope";
-import { formatNumber } from "@/lib/utils";
+import { formatNumber, toDateInputValue } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
 import { LinkButton } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/states";
 import { ScopeBar } from "@/components/filters/scope-bar";
+import {
+  ProjectsBar,
+  ProjectDetail,
+} from "@/components/projects/project-detail";
+import type { SessionListRow } from "@/components/sessions/sessions-table";
 import { StatTile } from "@/components/charts/stat-tile";
 import { RankedBars, SERIES } from "@/components/charts/chart-kit";
 import {
@@ -39,6 +44,7 @@ import {
   KeyPopulationChart,
   ParticipantsOverTime,
   SessionsOverTime,
+  ActivityIntensityHeatmap,
 } from "@/components/charts/charts";
 import { LensSwitcher } from "@/components/lens/lens-switcher";
 import { QualityAlerts } from "@/components/quality/quality-alerts";
@@ -79,6 +85,22 @@ export default async function DashboardPage({
         : scope.period.kind === "year"
           ? "vs last year"
           : undefined;
+
+  const rows: SessionListRow[] = data.rows.map((row) => ({
+    id: row.id,
+    date: toDateInputValue(row.date),
+    week: row.week,
+    community: row.community,
+    divisionSubdivision: row.divisionSubdivision,
+    project: row.project,
+    activityType: row.activityType,
+    thematicArea: row.thematicArea,
+    ageGroup: row.ageGroup,
+    facilitators: row.facilitators,
+    total: row.total,
+    createdBy: row.createdBy,
+    canEdit: false,
+  }));
 
   return (
     <>
@@ -134,6 +156,24 @@ export default async function DashboardPage({
           years,
         }}
       />
+
+      <ProjectsBar
+        projects={options.projects}
+        selectedProjectId={scope.projectId}
+        rows={rows}
+        className="mb-4"
+      />
+
+      {scope.projectId && (
+        <ProjectDetail
+          projectId={scope.projectId}
+          projects={options.projects}
+          rows={rows}
+          periodLabelText={data.label}
+          activityTypes={options.activityTypes}
+          className="mb-5"
+        />
+      )}
 
       {/* Quality alerts — always visible when there are issues */}
       {qualityAlerts.length > 0 && (
@@ -450,6 +490,17 @@ export default async function DashboardPage({
               </CardBody>
             </Card>
           </div>
+
+          {/* ──────────── Outreach Activity Intensity Heatmap by Day of the Week ──────────── */}
+          <Card>
+            <CardHeader
+              title="Outreach activity intensity"
+              description="Session frequency by day of the week to identify peak field productivity"
+            />
+            <CardBody>
+              <ActivityIntensityHeatmap rows={rows} />
+            </CardBody>
+          </Card>
         </div>
       )}
     </>

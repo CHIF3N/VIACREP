@@ -146,12 +146,20 @@ const fundersList = [
 ];
 
 // 3. Lookups
-const projectsList: Project[] = PROJECTS.map((name, i) => ({
-  id: `proj-${i + 1}`,
-  name,
-  sortOrder: i,
-  isActive: true,
-}));
+const projectsList: Project[] = [
+  ...PROJECTS.map((name, i) => ({
+    id: `proj-${i + 1}`,
+    name,
+    sortOrder: i,
+    isActive: true,
+  })),
+  {
+    id: "proj-other",
+    name: "Other / Unlisted Initiatives",
+    sortOrder: PROJECTS.length,
+    isActive: true,
+  },
+];
 
 const ageGroupsList: AgeGroup[] = AGE_GROUPS.map((name, i) => ({
   id: `age-${i + 1}`,
@@ -838,6 +846,23 @@ export const mockDb = {
     findMany: async (args?: any) => {
       const filtered = projectsList.filter((p) => matchesWhere(p, args?.where));
       return applySort(filtered, args?.orderBy);
+    },
+    findUnique: async (args: any) => {
+      return projectsList.find((p) => matchesWhere(p, args.where)) ?? null;
+    },
+    count: async (args?: any) => {
+      return projectsList.filter((p) => matchesWhere(p, args?.where)).length;
+    },
+    create: async ({ data }: any) => {
+      const id = data.id || `proj-${Date.now()}`;
+      const newProj = {
+        id,
+        name: data.name,
+        sortOrder: projectsList.length,
+        isActive: data.isActive !== undefined ? data.isActive : true,
+      };
+      projectsList.push(newProj);
+      return newProj;
     },
   },
 

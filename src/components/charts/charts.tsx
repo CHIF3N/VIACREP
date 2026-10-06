@@ -312,3 +312,5 @@ function NoData({ height }: { height: number }) {
     </div>
   );
 }
+
+export { ActivityIntensityHeatmap } from "./activity-intensity-heatmap";

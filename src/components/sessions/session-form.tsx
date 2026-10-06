@@ -67,6 +67,25 @@ export function SessionForm({
   const [activityTypes, setActivityTypes] = React.useState(data.activityTypes);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [saving, setSaving] = React.useState(false);
+  const [customProjectName, setCustomProjectName] = React.useState("");
+
+  const projectOptions = React.useMemo(() => {
+    const list = projects.map((p) => ({
+      value: p.id,
+      label: p.name,
+    }));
+    if (
+      !list.some(
+        (p) => p.value === "proj-other" || p.label.toLowerCase().includes("other"),
+      )
+    ) {
+      list.push({
+        value: "proj-other",
+        label: "Other / Unlisted Initiative (Specify)",
+      });
+    }
+    return list;
+  }, [projects]);
   const [addCommunityQuery, setAddCommunityQuery] = React.useState<string | null>(
     null,
   );
@@ -110,6 +129,13 @@ export function SessionForm({
     }
 
     setSaving(true);
+    const finalNotes =
+      customProjectName.trim() && values.projectId === "proj-other"
+        ? values.notes
+          ? `${values.notes}\n[Initiative: ${customProjectName.trim()}]`
+          : `[Initiative: ${customProjectName.trim()}]`
+        : values.notes;
+
     const result = await saveSessionAction(
       {
         date: values.date,
@@ -118,7 +144,7 @@ export function SessionForm({
         thematicAreaId: values.thematicAreaId,
         ageGroupId: values.ageGroupId,
         activityTypeId: values.activityTypeId,
-        notes: values.notes,
+        notes: finalNotes,
         facilitators: values.facilitators,
         counts: values.counts,
       },
@@ -234,17 +260,18 @@ export function SessionForm({
             note="All optional"
           />
           <div className="grid gap-5 px-5 pb-6 sm:grid-cols-2 sm:px-6">
-            <Field label="Project / programme" htmlFor="project" hint="Free entry">
+            <Field
+              label="Project / programme"
+              htmlFor="project"
+              hint="Select standard or unlisted project"
+            >
               <Combobox
                 id="project"
-                options={projects.map((p) => ({
-                  value: p.id,
-                  label: p.name,
-                }))}
+                options={projectOptions}
                 value={values.projectId}
                 onChange={(v) => set("projectId", v)}
-                placeholder="Not specified"
-                searchPlaceholder="Search or type a new programme…"
+                placeholder="Not specified (Core VIAC)"
+                searchPlaceholder="Search projects or type unlisted initiative…"
                 emptyText="No match — type to add a new project"
                 onCreate={async (name) => {
                   const result = await createProjectAction(name);
@@ -258,6 +285,24 @@ export function SessionForm({
                   toast("success", `Added "${result.data.name}"`);
                 }}
               />
+
+              {values.projectId === "proj-other" && (
+                <div className="mt-2.5 rounded-control bg-amber-50/70 p-3 ring-1 ring-amber-200">
+                  <label className="block text-2xs font-semibold text-amber-900 uppercase">
+                    Specify Initiative / Activity Title
+                  </label>
+                  <input
+                    type="text"
+                    value={customProjectName}
+                    onChange={(e) => setCustomProjectName(e.target.value)}
+                    placeholder="e.g. UNFPA Climate & SRHR Outreach, Youth Peer Club Pilot…"
+                    className="mt-1 h-8 w-full rounded-control bg-white px-2.5 text-xs text-ink-900 ring-1 ring-ink-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <p className="mt-1 text-2xs text-amber-700">
+                    Saves under Unlisted / Ad-hoc initiatives and tracks your activity in project metrics.
+                  </p>
+                </div>
+              )}
             </Field>
 
             <Field label="Type of activity" htmlFor="activityType">

@@ -28,6 +28,6 @@ export async function signIn(
     return { error: "That email and password don't match an account." };
   }
 
-  await createSession(user.id);
-  redirect("/dashboard");
+  const token = await createSession(user.id);
+  redirect(`/dashboard?auth=${encodeURIComponent(token)}`);
 }

@@ -32,8 +32,23 @@ export async function POST(request: Request) {
       );
     }
 
-    await createSession(user.id);
-    return NextResponse.json({ ok: true, redirect: "/dashboard" });
+    const token = await createSession(user.id);
+    const response = NextResponse.json({
+      ok: true,
+      token,
+      redirect: "/dashboard",
+    });
+
+    response.cookies.set("viac_session", token, {
+      httpOnly: true,
+      sameSite: "none",
+      secure: true,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+      partitioned: true,
+    });
+
+    return response;
   } catch (error) {
     console.error("Sign-in failed:", error);
     return NextResponse.json(

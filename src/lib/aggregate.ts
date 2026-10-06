@@ -154,7 +154,13 @@ function scopeWhere(scope: Scope): Prisma.SessionWhereInput {
       ...(end ? { lte: end } : {}),
     };
   }
-  if (scope.projectId) where.projectId = scope.projectId;
+  if (scope.projectId) {
+    if (scope.projectId === "unassigned") {
+      where.projectId = null;
+    } else {
+      where.projectId = scope.projectId;
+    }
+  }
   if (scope.thematicAreaId) where.thematicAreaId = scope.thematicAreaId;
   if (scope.activityTypeId) where.activityTypeId = scope.activityTypeId;
   if (scope.ageGroupId) where.ageGroupId = scope.ageGroupId;

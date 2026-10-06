@@ -18,6 +18,7 @@ export type ScopeBarOptions = {
 
 const PERIOD_TABS = [
   { key: "month", label: "Month" },
+  { key: "range", label: "Selected dates" },
   { key: "quarter", label: "Quarter" },
   { key: "year", label: "Year" },
   { key: "all", label: "All time" },
@@ -81,7 +82,21 @@ export function ScopeBar({
       changes.year = null;
       changes.month = null;
       changes.quarter = null;
+      changes.from = null;
+      changes.to = null;
+    } else if (kind === "range") {
+      const nowStr = now.toISOString().slice(0, 10);
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000)
+        .toISOString()
+        .slice(0, 10);
+      changes.from = period.kind === "range" ? period.from : thirtyDaysAgo;
+      changes.to = period.kind === "range" ? period.to : nowStr;
+      changes.year = null;
+      changes.month = null;
+      changes.quarter = null;
     } else {
+      changes.from = null;
+      changes.to = null;
       changes.year = String(year);
       changes.month =
         kind === "month"
@@ -140,19 +155,169 @@ export function ScopeBar({
           </div>
 
           {period.kind !== "all" && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {period.kind === "range" && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex items-center gap-1 rounded-control bg-white px-2 py-1 ring-1 ring-ink-200">
+                    <span className="text-2xs font-medium text-ink-500">From</span>
+                    <input
+                      type="date"
+                      value={period.from}
+                      onChange={(e) =>
+                        e.target.value && update({ from: e.target.value })
+                      }
+                      className="text-xs text-ink-800 bg-transparent outline-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 rounded-control bg-white px-2 py-1 ring-1 ring-ink-200">
+                    <span className="text-2xs font-medium text-ink-500">To</span>
+                    <input
+                      type="date"
+                      value={period.to}
+                      onChange={(e) =>
+                        e.target.value && update({ to: e.target.value })
+                      }
+                      className="text-xs text-ink-800 bg-transparent outline-none cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const todayStr = new Date().toISOString().slice(0, 10);
+                        update({ from: todayStr, to: todayStr });
+                      }}
+                      className="rounded px-2 py-1 text-2xs font-medium text-ink-600 bg-ink-100 hover:bg-ink-200 transition-colors"
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        const end = d.toISOString().slice(0, 10);
+                        const start = new Date(d.getTime() - 7 * 86400000)
+                          .toISOString()
+                          .slice(0, 10);
+                        update({ from: start, to: end });
+                      }}
+                      className="rounded px-2 py-1 text-2xs font-medium text-ink-600 bg-ink-100 hover:bg-ink-200 transition-colors"
+                    >
+                      Past 7d
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        const end = d.toISOString().slice(0, 10);
+                        const start = new Date(d.getTime() - 30 * 86400000)
+                          .toISOString()
+                          .slice(0, 10);
+                        update({ from: start, to: end });
+                      }}
+                      className="rounded px-2 py-1 text-2xs font-medium text-ink-600 bg-ink-100 hover:bg-ink-200 transition-colors"
+                    >
+                      Past 30d
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        const firstDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))
+                          .toISOString()
+                          .slice(0, 10);
+                        const todayStr = d.toISOString().slice(0, 10);
+                        update({ from: firstDay, to: todayStr });
+                      }}
+                      className="rounded px-2 py-1 text-2xs font-medium text-ink-600 bg-ink-100 hover:bg-ink-200 transition-colors"
+                    >
+                      This Month
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        const firstDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1))
+                          .toISOString()
+                          .slice(0, 10);
+                        const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 0))
+                          .toISOString()
+                          .slice(0, 10);
+                        update({ from: firstDay, to: lastDay });
+                      }}
+                      className="rounded px-2 py-1 text-2xs font-medium text-ink-600 bg-ink-100 hover:bg-ink-200 transition-colors"
+                    >
+                      Last Month
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        const from = `${d.getUTCFullYear()}-01-01`;
+                        const to = d.toISOString().slice(0, 10);
+                        update({ from, to });
+                      }}
+                      className="rounded px-2 py-1 text-2xs font-medium text-ink-600 bg-ink-100 hover:bg-ink-200 transition-colors"
+                    >
+                      YTD
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {period.kind === "month" && (
-                <MiniSelect
-                  value={String(period.month)}
-                  onChange={(v) => update({ month: v })}
-                  aria-label="Month"
-                >
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i + 1} value={i + 1}>
-                      {shortMonthName(i + 1)}
-                    </option>
-                  ))}
-                </MiniSelect>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex items-center gap-1 rounded-control bg-white p-0.5 ring-1 ring-ink-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prevM = period.month === 1 ? 12 : period.month - 1;
+                        const prevY = period.month === 1 ? year - 1 : year;
+                        update({ month: String(prevM), year: String(prevY) });
+                      }}
+                      className="flex size-7 items-center justify-center rounded text-ink-600 hover:bg-ink-100 transition-colors"
+                      title="Previous month"
+                      aria-label="Previous month"
+                    >
+                      ‹
+                    </button>
+                    <div className="flex items-center gap-0.5 overflow-x-auto">
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const m = i + 1;
+                        const activeM = period.month === m;
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => update({ month: String(m) })}
+                            className={cn(
+                              "rounded px-2 py-1 text-2xs font-medium transition-colors",
+                              activeM
+                                ? "bg-blue-600 text-white font-semibold shadow-xs"
+                                : "text-ink-600 hover:bg-ink-100 hover:text-ink-900",
+                            )}
+                          >
+                            {shortMonthName(m)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextM = period.month === 12 ? 1 : period.month + 1;
+                        const nextY = period.month === 12 ? year + 1 : year;
+                        update({ month: String(nextM), year: String(nextY) });
+                      }}
+                      className="flex size-7 items-center justify-center rounded text-ink-600 hover:bg-ink-100 transition-colors"
+                      title="Next month"
+                      aria-label="Next month"
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
               )}
               {period.kind === "quarter" && (
                 <MiniSelect
@@ -167,17 +332,19 @@ export function ScopeBar({
                   ))}
                 </MiniSelect>
               )}
-              <MiniSelect
-                value={String(year)}
-                onChange={(v) => update({ year: v })}
-                aria-label="Year"
-              >
-                {options.years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </MiniSelect>
+              {period.kind !== "range" && (
+                <MiniSelect
+                  value={String(year)}
+                  onChange={(v) => update({ year: v })}
+                  aria-label="Year"
+                >
+                  {options.years.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </MiniSelect>
+              )}
             </div>
           )}
         </div>
@@ -264,8 +431,16 @@ function listFor(
   options: ScopeBarOptions,
 ): { id: string; name: string }[] {
   switch (dimension) {
-    case "project":
-      return options.projects;
+    case "project": {
+      const list = [...options.projects];
+      if (!list.some((p) => p.id === "proj-other" || p.name.includes("Other"))) {
+        list.push({ id: "proj-other", name: "Other / Unlisted Initiatives" });
+      }
+      if (!list.some((p) => p.id === "unassigned")) {
+        list.push({ id: "unassigned", name: "Core VIAC (Unassigned)" });
+      }
+      return list;
+    }
     case "community":
       return options.communities;
     case "thematicArea":

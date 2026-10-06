@@ -10,6 +10,10 @@ import { LinkButton } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScopeBar } from "@/components/filters/scope-bar";
 import {
+  ProjectsBar,
+  ProjectDetail,
+} from "@/components/projects/project-detail";
+import {
   SessionsTable,
   SessionsTableToolbar,
   type SessionListRow,
@@ -91,7 +95,7 @@ export default async function SessionsPage({
 
       <ScopeBar
         scope={scope}
-        className="mb-5"
+        className="mb-4"
         dimensions={
           seesEverything(user)
             ? ["project", "community", "activityType", "officer"]
@@ -111,6 +115,24 @@ export default async function SessionsPage({
           years,
         }}
       />
+
+      <ProjectsBar
+        projects={options.projects}
+        selectedProjectId={scope.projectId}
+        rows={rows}
+        className="mb-4"
+      />
+
+      {scope.projectId && (
+        <ProjectDetail
+          projectId={scope.projectId}
+          projects={options.projects}
+          rows={rows}
+          periodLabelText={data.label}
+          activityTypes={options.activityTypes}
+          className="mb-5"
+        />
+      )}
 
       <Card className="overflow-hidden">
         <SessionsTableToolbar

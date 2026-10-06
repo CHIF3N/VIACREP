@@ -1,6 +1,6 @@
 import "server-only";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { cache } from "react";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
@@ -45,7 +45,7 @@ export async function verifyCredentials(email: string, password: string) {
   return ok ? user : null;
 }
 
-export async function createSession(userId: string) {
+export async function createSession(userId: string): Promise<string> {
   const token = await new SignJWT({ sub: userId })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -55,15 +55,31 @@ export async function createSession(userId: string) {
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: "none",
+    secure: true,
     path: "/",
     maxAge: MAX_AGE_SECONDS,
+    partitioned: true as any,
   });
+
+  return token;
 }
 
 export async function destroySession() {
   const store = await cookies();
+  try {
+    store.set(COOKIE_NAME, "", {
+      httpOnly: true,
+      sameSite: "none",
+      secure: true,
+      path: "/",
+      maxAge: 0,
+      expires: new Date(0),
+      partitioned: true as any,
+    });
+  } catch {
+    // ignore
+  }
   store.delete(COOKIE_NAME);
 }
 
@@ -74,7 +90,23 @@ export async function destroySession() {
 /** `cache` dedupes this across the many server components that ask per render. */
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
+  let token = store.get(COOKIE_NAME)?.value;
+
+  if (!token) {
+    try {
+      const headerList = await headers();
+      token = headerList.get("x-viac-session") || undefined;
+      if (!token) {
+        const auth = headerList.get("authorization");
+        if (auth?.startsWith("Bearer ")) {
+          token = auth.slice(7).trim();
+        }
+      }
+    } catch {
+      // In contexts where headers() cannot be accessed
+    }
+  }
+
   if (!token) return null;
 
   let userId: string;

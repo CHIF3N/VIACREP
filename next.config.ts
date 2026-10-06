@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: [
+    "*.run.app",
+    "ais-dev-b7ex5buxcuwtrjjqez4hye-584903286491.europe-west2.run.app",
+    "ais-pre-b7ex5buxcuwtrjjqez4hye-584903286491.europe-west2.run.app",
+  ],
   // The project sits under a home directory that contains an unrelated
   // package-lock.json; pin the workspace root so Turbopack ignores it.
   turbopack: { root: path.resolve(__dirname) },
