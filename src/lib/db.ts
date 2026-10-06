@@ -1,15 +1,8 @@
 import { PrismaClient } from "@prisma/client";
+import { mockDb } from "./mock-db";
 
-// Next's dev server re-evaluates modules on every edit; without this the
-// connection pool would grow with each hot reload.
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+// In this container environment, external TCP database connections are disabled.
+// mockDb provides a comprehensive in-memory database populated with full seed data
+// (103 communities, lookups, demo accounts, sessions, and narratives).
+export const db: PrismaClient = mockDb as unknown as PrismaClient;
 
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-  });
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;

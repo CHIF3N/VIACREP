@@ -1,0 +1,7 @@
+{
+  "name": "VIAC Reports",
+  "description": "Community outreach session tracking and standardised reporting for Vision in Action Cameroon.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

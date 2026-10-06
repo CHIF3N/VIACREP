@@ -21,14 +21,43 @@ type Account = {
 };
 
 export function SignInForm({ accounts }: { accounts: Account[] }) {
-  const [state, formAction] = useActionState<SignInState, FormData>(signIn, {});
+  const [state] = useActionState<SignInState, FormData>(signIn, {});
   const [email, setEmail] = React.useState(accounts[0]?.email ?? "");
   const [password, setPassword] = React.useState(DEMO_PASSWORD);
   const [reveal, setReveal] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMsg(
+          data.error || "That email and password don't match an account.",
+        );
+        setLoading(false);
+        return;
+      }
+      window.location.href = data.redirect || "/dashboard";
+    } catch {
+      setErrorMsg("Network error — please try again.");
+      setLoading(false);
+    }
+  }
+
+  const displayedError = errorMsg || state.error;
 
   return (
     <>
-      <form action={formAction} className="mt-8 space-y-4">
+      <form onSubmit={handleSubmit} className="mt-8 space-y-4">
         <Field label="Email address" htmlFor="email">
           <Input
             id="email"
@@ -38,7 +67,7 @@ export function SignInForm({ accounts }: { accounts: Account[] }) {
             placeholder="you@viacame.org"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            invalid={Boolean(state.error)}
+            invalid={Boolean(displayedError)}
             required
           />
         </Field>
@@ -52,7 +81,7 @@ export function SignInForm({ accounts }: { accounts: Account[] }) {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              invalid={Boolean(state.error)}
+              invalid={Boolean(displayedError)}
               className="pr-12"
               required
             />
@@ -67,14 +96,14 @@ export function SignInForm({ accounts }: { accounts: Account[] }) {
           </div>
         </Field>
 
-        {state.error && (
+        {displayedError && (
           <p className="flex items-start gap-2 rounded-control bg-danger-50 px-3.5 py-2.5 text-[13px] leading-5 text-danger-700 ring-1 ring-inset ring-danger-500/15">
             <AlertCircle className="mt-px size-4 shrink-0" aria-hidden />
-            {state.error}
+            {displayedError}
           </p>
         )}
 
-        <SubmitButton />
+        <SubmitButton loading={loading} />
       </form>
 
       {accounts.length > 0 && (
@@ -126,12 +155,13 @@ export function SignInForm({ accounts }: { accounts: Account[] }) {
   );
 }
 
-function SubmitButton() {
+function SubmitButton({ loading }: { loading?: boolean }) {
   const { pending } = useFormStatus();
+  const isSubmitting = loading || pending;
   return (
-    <Button type="submit" size="lg" loading={pending} className="w-full">
-      {pending ? "Signing in…" : "Sign in"}
-      {!pending && <ArrowRight className="size-4" aria-hidden />}
+    <Button type="submit" size="lg" loading={isSubmitting} className="w-full">
+      {isSubmitting ? "Signing in…" : "Sign in"}
+      {!isSubmitting && <ArrowRight className="size-4" aria-hidden />}
     </Button>
   );
 }

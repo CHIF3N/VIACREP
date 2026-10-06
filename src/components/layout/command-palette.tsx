@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -38,18 +38,21 @@ export function CommandPalette() {
   /* Focus input when opened */
   React.useEffect(() => {
     if (open) {
-      setQuery("");
-      setResults([]);
-      setSelectedIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      const timer = setTimeout(() => {
+        setQuery("");
+        setResults([]);
+        setSelectedIndex(0);
+        inputRef.current?.focus();
+      }, 20);
+      return () => clearTimeout(timer);
     }
   }, [open]);
 
   /* Debounced search */
   React.useEffect(() => {
     if (!query.trim()) {
-      setResults([]);
-      return;
+      const timer = setTimeout(() => setResults([]), 0);
+      return () => clearTimeout(timer);
     }
     const tid = setTimeout(async () => {
       setLoading(true);
