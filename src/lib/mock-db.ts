@@ -429,13 +429,36 @@ type SessionData = Session & {
   auditLogs?: AuditLogData[];
 };
 
-const sessionsList: SessionData[] = [];
-const sessionCountsList: SessionCountData[] = [];
-const sessionFacilitatorsList: SessionFacilitatorData[] = [];
-const clinicalRecordsList: SrhrClinicalRecordData[] = [];
-const auditLogsList: AuditLogData[] = [];
-const documentsList: any[] = [];
-const reportsList: any[] = [];
+const globalForDb = globalThis as unknown as {
+  __mock_sessionsList?: SessionData[];
+  __mock_sessionCountsList?: SessionCountData[];
+  __mock_sessionFacilitatorsList?: SessionFacilitatorData[];
+  __mock_clinicalRecordsList?: SrhrClinicalRecordData[];
+  __mock_auditLogsList?: AuditLogData[];
+  __mock_documentsList?: any[];
+  __mock_reportsList?: any[];
+};
+
+if (!globalForDb.__mock_documentsList) globalForDb.__mock_documentsList = [];
+const documentsList: any[] = globalForDb.__mock_documentsList;
+
+if (!globalForDb.__mock_reportsList) globalForDb.__mock_reportsList = [];
+const reportsList: any[] = globalForDb.__mock_reportsList;
+
+if (!globalForDb.__mock_sessionsList) globalForDb.__mock_sessionsList = [];
+const sessionsList: SessionData[] = globalForDb.__mock_sessionsList;
+
+if (!globalForDb.__mock_sessionCountsList) globalForDb.__mock_sessionCountsList = [];
+const sessionCountsList: SessionCountData[] = globalForDb.__mock_sessionCountsList;
+
+if (!globalForDb.__mock_sessionFacilitatorsList) globalForDb.__mock_sessionFacilitatorsList = [];
+const sessionFacilitatorsList: SessionFacilitatorData[] = globalForDb.__mock_sessionFacilitatorsList;
+
+if (!globalForDb.__mock_clinicalRecordsList) globalForDb.__mock_clinicalRecordsList = [];
+const clinicalRecordsList: SrhrClinicalRecordData[] = globalForDb.__mock_clinicalRecordsList;
+
+if (!globalForDb.__mock_auditLogsList) globalForDb.__mock_auditLogsList = [];
+const auditLogsList: AuditLogData[] = globalForDb.__mock_auditLogsList;
 
 // Seed demo sessions
 const officers = usersList.filter((u) => u.role === Role.OFFICER);
@@ -452,7 +475,8 @@ let countCounter = 1;
 let facCounter = 1;
 let clinicCounter = 1;
 
-for (const [index, { year, month }] of months.entries()) {
+if (sessionsList.length === 0) {
+  for (const [index, { year, month }] of months.entries()) {
   const perMonth = 5 + index;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -587,6 +611,7 @@ for (const [index, { year, month }] of months.entries()) {
 
     sessionsList.push(sessionObj);
   }
+}
 }
 
 // 7. Narrative Periods

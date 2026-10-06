@@ -1,4 +1,4 @@
-﻿import { notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/layout/page-header";
@@ -29,17 +29,19 @@ export default async function ReviewPage({
 
   if (!doc) notFound();
 
-  const isExcel =
-    doc.mimeType.includes("spreadsheet") ||
-    doc.mimeType.includes("excel") ||
-    doc.fileName.endsWith(".xlsx");
+  const isPdf = doc.mimeType.includes("pdf") || doc.fileName.toLowerCase().endsWith(".pdf");
+  const isExcel = !isPdf;
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Import review"
+        eyebrow="Import review & staging"
         title={doc.fileName}
-        description={`Uploaded by ${doc.uploadedBy.name} on ${doc.createdAt.toLocaleDateString("en-GB")}`}
+        description={`Uploaded by ${doc.uploadedBy?.name ?? "Coordinator"} on ${new Date(doc.createdAt).toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })}`}
       />
       <StagingGrid
         documentId={doc.id}
@@ -47,6 +49,6 @@ export default async function ReviewPage({
         isExcel={isExcel}
         status={doc.extractionStatus}
       />
-    </>
+    </div>
   );
 }

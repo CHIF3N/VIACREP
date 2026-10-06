@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
@@ -17,12 +17,6 @@ export const metadata: Metadata = {
   },
   description:
     "Community outreach session tracking and standardised reporting for Vision in Action Cameroon.",
-};
-
-export const viewport: Viewport = {
-  themeColor: "#1CA3EC",
-  width: "device-width",
-  initialScale: 1,
 };
 
 export default function RootLayout({
